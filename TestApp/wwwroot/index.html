@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <h1>Hello</h1>
+
+    <script type="module">
+        import { MqttRpcClient } from './MqttRpcClient.js'
+
+        const mqtt = new MqttRpcClient('ws://localhost:5678/mqtt')
+
+        // 等到連線後使用
+        setTimeout(async () => {
+            try {
+                const result = await mqtt.fetch("device/getStatus", { id: "abc123" })
+                console.log("Response:", result)
+            } catch (err) {
+                console.error("Fetch failed:", err)
+            }
+        }, 1000)
+    </script>
+</body>
+
+
+</html>
