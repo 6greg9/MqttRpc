@@ -64,10 +64,10 @@ namespace TestApp
             //        {
             //            return "hihi";
             //        });
-                    
+
 
             //    });
-                
+
 
             //});
             app.UseEndpoints(endpoints =>
@@ -132,6 +132,23 @@ namespace TestApp
             }
 
 
+        }
+
+        private async void Form1_Load(object sender, EventArgs e)
+        {
+            await webView21.EnsureCoreWebView2Async();
+
+            //var path = Path.Combine(Application.StartupPath, "wwwroot", "index.html");
+
+            //webView21.Source = new Uri(path);
+
+            webView21.Source = new Uri("localhost:5678");
+        }
+
+        private void formToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var frm = new Form2();
+            frm.Show();
         }
     }
 }

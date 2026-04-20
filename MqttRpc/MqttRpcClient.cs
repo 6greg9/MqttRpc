@@ -34,11 +34,11 @@ public class MqttRpcClient : IAsyncDisposable
         //    .WithProtocolVersion(MQTTnet.Formatter.MqttProtocolVersion.V500) // v5 也可試
         //    .Build();
         var url = $"{brokerHost}:{brokerPort}{path}";
-         _options = new MqttClientOptionsBuilder()
-//.WithWebSocketServer( o=>o.WithUri("ws://localhost:5678/mqtt"))
-.WithWebSocketServer(o=>o.WithUri($"{brokerHost}:{brokerPort}{path}"))
-.WithClientId("web-client-1")
-.Build();
+        _options = new MqttClientOptionsBuilder()
+                        //.WithWebSocketServer( o=>o.WithUri("ws://localhost:5678/mqtt"))
+                        .WithWebSocketServer(o => o.WithUri($"{brokerHost}:{brokerPort}{path}"))
+                        .WithClientId("web-client-1")
+                        .Build();
 
         _client.ApplicationMessageReceivedAsync += HandleMessageAsync;
     }
@@ -54,7 +54,7 @@ public class MqttRpcClient : IAsyncDisposable
         await _client.SubscribeAsync("rpc/response/+");
     }
 
-    public async Task<JsonElement> CallAsync(string method, object payload, TimeSpan? timeout =  null )
+    public async Task<JsonElement> CallAsync(string method, object payload, TimeSpan? timeout = null)
     {
         timeout = timeout ?? TimeSpan.FromSeconds(5);
         var requestId = Guid.NewGuid().ToString();
