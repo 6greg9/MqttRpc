@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MqttRpc;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -17,6 +18,17 @@ namespace TestApp
         {
             InitializeComponent();
             _frm1 = frm1;
+        }
+
+        private async void button1_Click(object sender, EventArgs e)
+        {
+            var client = new MqttRpcClient("ws://localhost", 6666);
+            await client.SimplePub("simple", textBox1.Text);
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            _frm1.button1_Click(sender, e);
         }
     }
 }

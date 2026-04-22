@@ -41,9 +41,9 @@
             webView21.CreationProperties = null;
             webView21.DefaultBackgroundColor = Color.White;
             webView21.Dock = DockStyle.Fill;
-            webView21.Location = new Point(0, 31);
+            webView21.Location = new Point(0, 32);
             webView21.Name = "webView21";
-            webView21.Size = new Size(978, 514);
+            webView21.Size = new Size(978, 513);
             webView21.TabIndex = 1;
             webView21.ZoomFactor = 1D;
             // 
@@ -53,14 +53,14 @@
             menuStrip1.Items.AddRange(new ToolStripItem[] { formToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
-            menuStrip1.Size = new Size(978, 31);
+            menuStrip1.Size = new Size(978, 32);
             menuStrip1.TabIndex = 2;
             menuStrip1.Text = "menuStrip1";
             // 
             // formToolStripMenuItem
             // 
             formToolStripMenuItem.Name = "formToolStripMenuItem";
-            formToolStripMenuItem.Size = new Size(70, 27);
+            formToolStripMenuItem.Size = new Size(70, 28);
             formToolStripMenuItem.Text = "Form";
             formToolStripMenuItem.Click += formToolStripMenuItem_Click;
             // 
