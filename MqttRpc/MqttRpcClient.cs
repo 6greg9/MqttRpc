@@ -43,6 +43,18 @@ public class MqttRpcClient : IAsyncDisposable
         _client.ApplicationMessageReceivedAsync += HandleMessageAsync;
     }
 
+    public async Task SimplePub(string topic,string msg)
+    {
+        var json = JsonSerializer.Serialize(msg);
+        var mqttMessage = new MqttApplicationMessageBuilder()
+            .WithTopic($"{topic}")
+            .WithPayload(Encoding.UTF8.GetBytes(json))
+            .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
+            .Build();
+
+        await _client.PublishAsync(mqttMessage);
+    }
+
     public async Task ConnectAsync()
     {
         if (!_client.IsConnected)

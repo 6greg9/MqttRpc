@@ -147,7 +147,7 @@ namespace TestApp
 
         private void formToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var frm = new Form2();
+            var frm = new Form2(this);
             frm.Show();
         }
     }

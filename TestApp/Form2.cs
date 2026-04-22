@@ -12,9 +12,11 @@ namespace TestApp
 {
     public partial class Form2 : Form
     {
-        public Form2()
+        Form1 _frm1;
+        public Form2(Form1 frm1)
         {
             InitializeComponent();
+            _frm1 = frm1;
         }
     }
 }
