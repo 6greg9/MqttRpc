@@ -361,3 +361,11 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# JavaScript packages live alongside the .NET projects.
+!packages/
+!packages/mqtt-rpc-client/
+!packages/mqtt-rpc-client/**
+.pnpm-store/
+packages/*/node_modules/
+packages/*/dist/

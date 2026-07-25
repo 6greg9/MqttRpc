@@ -1,147 +1,268 @@
-﻿using MQTTnet;
-using MQTTnet.Protocol;
+using System.Buffers;
 using System.Collections.Concurrent;
-using System.IO;
-using System.Text;
 using System.Text.Json;
+using MQTTnet;
+using MQTTnet.Formatter;
+using MQTTnet.Protocol;
 
 namespace MqttRpc;
 
-public class MqttRpcClient : IAsyncDisposable
+/// <summary>
+/// Calls MqttRpc methods over an MQTT 5 WebSocket connection.
+/// </summary>
+public sealed class MqttRpcClient : IAsyncDisposable
 {
     private readonly IMqttClient _client;
-    private readonly MqttClientOptions _options;
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonElement>> _pending = new();
+    private readonly SemaphoreSlim _connectGate = new(1, 1);
+    private readonly JsonSerializerOptions _jsonOptions;
+    private readonly MqttClientOptions _mqttOptions;
+    private readonly MqttRpcClientOptions _options;
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _pending = new();
+    private readonly string _replyTopic;
+    private bool _disposed;
 
-    public MqttRpcClient(string brokerHost, int brokerPort = 1883, string path = "/mqtt")
+    /// <summary>
+    /// Initializes a typed MqttRpc caller.
+    /// </summary>
+    /// <param name="options">Connection, topic, identity, and timeout settings.</param>
+    /// <param name="jsonOptions">Optional serializer settings for request and response payloads.</param>
+    public MqttRpcClient(
+        MqttRpcClientOptions options,
+        JsonSerializerOptions? jsonOptions = null)
     {
-        var factory = new MqttClientFactory();
-        _client = factory.CreateMqttClient();
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options.Validate();
+        _jsonOptions = jsonOptions ?? new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
-        //_options = new MqttClientOptionsBuilder()
-        //    .WithTcpServer(brokerHost, brokerPort)
-        //    .Build();
+        var clientId = options.ClientId ?? $"dotnet-{Guid.NewGuid():N}";
+        _replyTopic = MqttRpcProtocol.BuildReplyTopic(clientId, options.TopicRoot);
 
-        // WebSocket 連線設定（URL 格式為 ws(s)://host:port/path）
-
-
-        //_options = new MqttClientOptionsBuilder()
-        //    .WithWebSocketServer((o) =>
-        //    {
-        //        o.WithUri($"{brokerHost}:{brokerPort}{path}");
-
-        //    })
-        //    .WithProtocolVersion(MQTTnet.Formatter.MqttProtocolVersion.V500) // v5 也可試
-        //    .Build();
-        var url = $"{brokerHost}:{brokerPort}{path}";
-        _options = new MqttClientOptionsBuilder()
-                        //.WithWebSocketServer( o=>o.WithUri("ws://localhost:5678/mqtt"))
-                        .WithWebSocketServer(o => o.WithUri($"{brokerHost}:{brokerPort}{path}"))
-                        .WithClientId("web-client-1")
-                        .Build();
+        _client = new MqttClientFactory().CreateMqttClient();
+        _mqttOptions = new MqttClientOptionsBuilder()
+            .WithWebSocketServer(webSocket => webSocket.WithUri(options.WebSocketUri.AbsoluteUri))
+            .WithProtocolVersion(MqttProtocolVersion.V500)
+            .WithClientId(clientId)
+            .Build();
 
         _client.ApplicationMessageReceivedAsync += HandleMessageAsync;
+        _client.DisconnectedAsync += HandleDisconnectedAsync;
     }
 
-    public async Task SimplePub(string topic,string msg)
-    {
-        var json = JsonSerializer.Serialize(msg);
-        var mqttMessage = new MqttApplicationMessageBuilder()
-            .WithTopic($"{topic}")
-            .WithPayload(Encoding.UTF8.GetBytes(json))
-            .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
-            .Build();
+    /// <summary>
+    /// Gets whether the underlying MQTT client is currently connected.
+    /// </summary>
+    public bool IsConnected => _client.IsConnected;
 
-        await _client.PublishAsync(mqttMessage);
+    /// <summary>
+    /// Connects to the broker and subscribes to this client's reply topic.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels connection or subscription.</param>
+    /// <returns>A task that completes when calls can be issued.</returns>
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await _connectGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_client.IsConnected)
+            {
+                return;
+            }
+
+            await _client.ConnectAsync(_mqttOptions, cancellationToken).ConfigureAwait(false);
+            var subscribeOptions = new MqttClientSubscribeOptionsBuilder()
+                .WithTopicFilter(_replyTopic, MqttQualityOfServiceLevel.AtLeastOnce)
+                .Build();
+            await _client.SubscribeAsync(subscribeOptions, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (_client.IsConnected)
+            {
+                await _client.DisconnectAsync().ConfigureAwait(false);
+            }
+
+            throw;
+        }
+        finally
+        {
+            _connectGate.Release();
+        }
     }
 
-    public async Task ConnectAsync()
+    /// <summary>
+    /// Calls a remote RPC method and waits for its correlated response.
+    /// </summary>
+    /// <typeparam name="TRequest">The request parameters type.</typeparam>
+    /// <typeparam name="TResponse">The expected response result type.</typeparam>
+    /// <param name="method">The slash-separated RPC method name.</param>
+    /// <param name="parameters">The request parameters.</param>
+    /// <param name="timeout">An optional per-call timeout.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The deserialized remote result.</returns>
+    /// <exception cref="MqttRpcRemoteException">The remote handler returned an error.</exception>
+    /// <exception cref="MqttRpcProtocolException">The response did not conform to the protocol.</exception>
+    /// <exception cref="TimeoutException">The call exceeded its timeout.</exception>
+    public async Task<TResponse> CallAsync<TRequest, TResponse>(
+        string method,
+        TRequest parameters,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_client.IsConnected)
         {
-            await _client.ConnectAsync(_options);
+            throw new InvalidOperationException("ConnectAsync must complete before making an RPC call.");
         }
 
-        // 訂閱所有 response
-        await _client.SubscribeAsync("rpc/response/+");
-    }
-
-    public async Task<JsonElement> CallAsync(string method, object payload, TimeSpan? timeout = null)
-    {
-        timeout = timeout ?? TimeSpan.FromSeconds(5);
-        var requestId = Guid.NewGuid().ToString();
-        var tcs = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pending[requestId] = tcs;
-
-        var message = new
+        var normalizedMethod = MqttRpcProtocol.NormalizeMethod(method);
+        var effectiveTimeout = timeout ?? _options.DefaultTimeout;
+        if (effectiveTimeout <= TimeSpan.Zero)
         {
-            requestId,
-            method,
-            payload,
-            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        };
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        }
 
-        var json = JsonSerializer.Serialize(message);
-        var mqttMessage = new MqttApplicationMessageBuilder()
-            .WithTopic($"rpc/request/{method}")
-            .WithPayload(Encoding.UTF8.GetBytes(json))
-            .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
+        var correlationData = Guid.NewGuid().ToByteArray();
+        var correlationKey = Convert.ToHexString(correlationData);
+        var completion = new TaskCompletionSource<byte[]>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_pending.TryAdd(correlationKey, completion))
+        {
+            throw new InvalidOperationException("Could not allocate an RPC correlation identifier.");
+        }
+
+        var requestPayload = JsonSerializer.SerializeToUtf8Bytes(
+            new MqttRpcRequestEnvelope<TRequest>(parameters),
+            _jsonOptions);
+        var expirySeconds = (uint)Math.Clamp(
+            Math.Ceiling(effectiveTimeout.TotalSeconds),
+            1,
+            uint.MaxValue);
+
+        var requestMessage = new MqttApplicationMessageBuilder()
+            .WithTopic(MqttRpcProtocol.BuildRequestTopic(normalizedMethod, _options.TopicRoot))
+            .WithPayload(requestPayload)
+            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+            .WithResponseTopic(_replyTopic)
+            .WithCorrelationData(correlationData)
+            .WithContentType("application/json")
+            .WithPayloadFormatIndicator(MqttPayloadFormatIndicator.CharacterData)
+            .WithMessageExpiryInterval(expirySeconds)
             .Build();
 
-        await _client.PublishAsync(mqttMessage);
+        using var timeoutSource = new CancellationTokenSource(effectiveTimeout);
+        using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeoutSource.Token);
+        using var registration = linkedSource.Token.Register(
+            () => completion.TrySetCanceled(linkedSource.Token));
 
-        if (timeout.HasValue)
+        try
         {
-            using var cts = new CancellationTokenSource(timeout.Value);
-            await using var _ = cts.Token.Register(() =>
+            await _client.PublishAsync(requestMessage, linkedSource.Token).ConfigureAwait(false);
+            var responsePayload = await completion.Task.ConfigureAwait(false);
+
+            MqttRpcResponseEnvelope<TResponse>? response;
+            try
             {
-                if (_pending.TryRemove(requestId, out var timedOutTcs))
-                {
-                    timedOutTcs.TrySetException(new TimeoutException($"RPC {requestId} timed out"));
-                }
-            });
+                response = JsonSerializer.Deserialize<MqttRpcResponseEnvelope<TResponse>>(
+                    responsePayload,
+                    _jsonOptions);
+            }
+            catch (JsonException exception)
+            {
+                throw new MqttRpcProtocolException("The RPC response is not valid JSON.", exception);
+            }
 
-            return await tcs.Task;
+            if (response is null)
+            {
+                throw new MqttRpcProtocolException("The RPC response body is empty.");
+            }
+
+            if (!response.Ok)
+            {
+                throw new MqttRpcRemoteException(
+                    response.Error
+                    ?? new MqttRpcError(
+                        MqttRpcErrorCodes.InternalError,
+                        "The remote endpoint returned an unspecified error."));
+            }
+
+            return response.Result!;
         }
-        else
+        catch (OperationCanceledException) when (
+            timeoutSource.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
         {
-            return await tcs.Task;
+            throw new TimeoutException(
+                $"RPC method '{normalizedMethod}' timed out after {effectiveTimeout}.");
+        }
+        finally
+        {
+            _pending.TryRemove(correlationKey, out _);
         }
     }
 
-    private Task HandleMessageAsync(MqttApplicationMessageReceivedEventArgs e)
+    private Task HandleMessageAsync(MqttApplicationMessageReceivedEventArgs eventArgs)
     {
-        var topic = e.ApplicationMessage.Topic;
-        if (topic.StartsWith("rpc/response/"))
+        var message = eventArgs.ApplicationMessage;
+        if (!string.Equals(message.Topic, _replyTopic, StringComparison.Ordinal)
+            || message.CorrelationData is not { Length: > 0 })
         {
-            var requestId = topic.Split('/').Last();
-            var payload = Encoding.UTF8.GetString(e.ApplicationMessage.Payload);
+            return Task.CompletedTask;
+        }
 
-            if (_pending.TryRemove(requestId, out var tcs))
-            {
-                try
-                {
-                    var json = JsonSerializer.Deserialize<JsonElement>(payload);
-                    tcs.TrySetResult(json);
-                }
-                catch (Exception ex)
-                {
-                    tcs.TrySetException(ex);
-                }
-            }
+        var correlationKey = Convert.ToHexString(message.CorrelationData);
+        if (_pending.TryRemove(correlationKey, out var completion))
+        {
+            completion.TrySetResult(message.Payload.ToArray());
+            eventArgs.IsHandled = true;
         }
 
         return Task.CompletedTask;
     }
 
+    private Task HandleDisconnectedAsync(MqttClientDisconnectedEventArgs eventArgs)
+    {
+        var exception = eventArgs.Exception
+            ?? new InvalidOperationException("The MQTT connection was closed.");
+        foreach (var pendingCall in _pending)
+        {
+            pendingCall.Value.TrySetException(exception);
+        }
+
+        _pending.Clear();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Disconnects and releases the underlying MQTT client.
+    /// </summary>
+    /// <returns>A task that completes after disposal finishes.</returns>
     public async ValueTask DisposeAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _client.ApplicationMessageReceivedAsync -= HandleMessageAsync;
+        _client.DisconnectedAsync -= HandleDisconnectedAsync;
+
         try
         {
-            await _client.DisconnectAsync();
+            if (_client.IsConnected)
+            {
+                await _client.DisconnectAsync().ConfigureAwait(false);
+            }
         }
-        catch { }
+        catch
+        {
+            // Disposal should remain best-effort.
+        }
 
         _client.Dispose();
+        _connectGate.Dispose();
     }
 }

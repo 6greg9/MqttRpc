@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>MqttRpc.AspNetCore</PackageId>
+    <Version>0.1.0-alpha.1</Version>
+    <Title>MqttRpc.AspNetCore</Title>
+    <Authors>6greg9</Authors>
+    <Description>ASP.NET Core adapter for hosting a WebSocket-only MqttRpc MQTT broker and responder.</Description>
+    <PackageTags>mqtt;mqtt5;rpc;mqttnet;aspnetcore;websocket;webview</PackageTags>
+    <PackageProjectUrl>https://github.com/6greg9/MqttRpc</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/6greg9/MqttRpc.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes>Initial preview of the ASP.NET Core WebSocket hosting adapter for MqttRpc.</PackageReleaseNotes>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\artifacts\packages</PackageOutputPath>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MQTTnet.AspNetCore" Version="5.0.1.1416" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MqttRpc\MqttRpc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

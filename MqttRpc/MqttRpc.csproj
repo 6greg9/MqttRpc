@@ -4,11 +4,34 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>MqttRpc</PackageId>
+    <Version>0.1.0-alpha.1</Version>
+    <Title>MqttRpc</Title>
+    <Authors>6greg9</Authors>
+    <Description>MQTT 5 request/response RPC for typed .NET clients and responders, with MQTT.js interoperability.</Description>
+    <PackageTags>mqtt;mqtt5;rpc;mqttnet;request-response;webview</PackageTags>
+    <PackageProjectUrl>https://github.com/6greg9/MqttRpc</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/6greg9/MqttRpc.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes>Initial preview of the MqttRpc v1 protocol, typed router, MQTTnet responder, and .NET client.</PackageReleaseNotes>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\artifacts\packages</PackageOutputPath>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="MQTTnet" Version="5.0.1.1416" />
     <PackageReference Include="MQTTnet.Server" Version="5.0.1.1416" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

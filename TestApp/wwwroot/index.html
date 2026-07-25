@@ -1,14 +1,194 @@
-<!DOCTYPE html>
-<html lang="">
+<!doctype html>
+<html lang="zh-Hant">
   <head>
-    <meta charset="UTF-8">
-    <link rel="icon" href="/favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vite App</title>
-    <script type="module" crossorigin src="/assets/index-C39BbYEu.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CFWMytAb.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>MqttRpc Lab</title>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">WEBVIEW ↔ MQTT 5 ↔ C#</p>
+          <h1>MqttRpc <span>Lab</span></h1>
+          <p class="hero-copy">
+            用熟悉的 function call 介面，走 MQTT 的 request / response 與雙向訊息通道。
+          </p>
+        </div>
+        <div class="hero-status" aria-live="polite">
+          <span id="status-dot" class="status-dot"></span>
+          <div>
+            <small>CONNECTION</small>
+            <strong id="status-label">尚未連線</strong>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="panel connection-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-index">01 / TRANSPORT</p>
+              <h2>Broker connection</h2>
+            </div>
+            <p>MQTT.js 5.15.2 · MQTT protocol v5</p>
+          </div>
+
+          <div class="connection-grid">
+            <label class="field field-wide">
+              <span>WebSocket endpoint</span>
+              <input id="broker-url" type="url" spellcheck="false" />
+            </label>
+            <div class="button-row">
+              <button id="connect-button" class="button button-primary">Connect</button>
+              <button id="disconnect-button" class="button button-muted" disabled>Disconnect</button>
+            </div>
+          </div>
+
+          <dl class="connection-meta">
+            <div>
+              <dt>Client ID</dt>
+              <dd id="client-id">—</dd>
+            </div>
+            <div>
+              <dt>Reply topic</dt>
+              <dd id="reply-topic">—</dd>
+            </div>
+            <div>
+              <dt>Last latency</dt>
+              <dd id="last-latency">—</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="workspace-grid">
+          <article class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="section-index">02 / TYPED CALLS</p>
+                <h2>Device functions</h2>
+              </div>
+            </div>
+
+            <div class="function-card">
+              <div class="function-title">
+                <code>device/getStatus</code>
+                <span class="method-tag">QUERY</span>
+              </div>
+              <label class="field">
+                <span>Device ID</span>
+                <input id="device-id" value="webview-demo" />
+              </label>
+              <button class="button button-primary rpc-action" id="status-button" disabled>
+                Call getStatus()
+              </button>
+            </div>
+
+            <div class="function-card">
+              <div class="function-title">
+                <code>device/reboot</code>
+                <span class="method-tag method-tag-warn">COMMAND</span>
+              </div>
+              <label class="field">
+                <span>Reason</span>
+                <input id="reboot-reason" value="Operator demo" />
+              </label>
+              <button class="button button-secondary rpc-action" id="reboot-button" disabled>
+                Call reboot()
+              </button>
+            </div>
+
+            <div class="response-block">
+              <div class="response-heading">
+                <span>Typed response</span>
+                <span id="typed-result-state">WAITING</span>
+              </div>
+              <pre id="typed-result">Connect to the embedded broker to begin.</pre>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="section-index">03 / RAW CALL</p>
+                <h2>Protocol console</h2>
+              </div>
+            </div>
+
+            <label class="field">
+              <span>Method</span>
+              <input id="custom-method" value="system/echo" spellcheck="false" />
+            </label>
+            <label class="field">
+              <span>Params JSON</span>
+              <textarea id="custom-params" rows="8" spellcheck="false">{
+  "message": "Hello from mqtt.js",
+  "sequence": 1
+}</textarea>
+            </label>
+            <button class="button button-primary rpc-action" id="custom-button" disabled>
+              rpc.call(method, params)
+            </button>
+
+            <div class="response-block">
+              <div class="response-heading">
+                <span>Raw response</span>
+                <span id="custom-result-state">WAITING</span>
+              </div>
+              <pre id="custom-result">No call made yet.</pre>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel protocol-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-index">04 / MESSAGE FLOW</p>
+              <h2>One function call, two publishes</h2>
+            </div>
+          </div>
+          <div class="flow" aria-label="MqttRpc message flow">
+            <div class="flow-node">
+              <span>1</span>
+              <strong>Browser call</strong>
+              <code>rpc.call("device/getStatus")</code>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-node">
+              <span>2</span>
+              <strong>MQTT request</strong>
+              <code>mqttrpc/v1/request/…</code>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-node">
+              <span>3</span>
+              <strong>C# handler</strong>
+              <code>router.Map&lt;TReq, TRes&gt;</code>
+            </div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-node">
+              <span>4</span>
+              <strong>Correlated reply</strong>
+              <code>responseTopic + correlationData</code>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel log-panel">
+          <div class="section-heading compact">
+            <div>
+              <p class="section-index">LIVE LOG</p>
+              <h2>Client events</h2>
+            </div>
+            <button id="clear-log-button" class="text-button">Clear</button>
+          </div>
+          <ol id="event-log" class="event-log" aria-live="polite"></ol>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="app.js"></script>
   </body>
 </html>

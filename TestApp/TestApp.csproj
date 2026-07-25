@@ -12,34 +12,26 @@
 	</ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.WindowsForms" Version="10.0.51" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3912.50" />
-    <PackageReference Include="MQTTnet.AspNetCore" Version="5.0.1.1416" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\MqttRpc.AspNetCore\MqttRpc.AspNetCore.csproj" />
     <ProjectReference Include="..\MqttRpc\MqttRpc.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="wwwroot\assets\AboutView-DqwX0bQd.js">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="wwwroot\assets\AboutView-tn0RQdqM.css">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="wwwroot\assets\index-C39BbYEu.js">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="wwwroot\assets\index-CFWMytAb.css">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="wwwroot\index.html">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="wwwroot\MqttRpcClient.js">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    <None Update="wwwroot\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <Target Name="RemoveUnusedWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference
+        Remove="@(Reference)"
+        Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
 
 </Project>

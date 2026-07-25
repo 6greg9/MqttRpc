@@ -1,154 +1,97 @@
-﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
-using MQTTnet.AspNetCore;
+using System.Text.Json;
 using MqttRpc;
-using System.Reflection.PortableExecutable;
 
-namespace TestApp
+namespace TestApp;
+
+public partial class Form1 : Form
 {
-    public partial class Form1 : Form
+    private readonly MqttRpcRouter _router;
+    private DesktopAppHost? _desktopHost;
+
+    public Form1()
     {
-        public Form1()
+        InitializeComponent();
+        _router = DemoRpcRoutes.CreateRouter();
+    }
+
+    public async void button1_Click(object sender, EventArgs e)
+    {
+        if (_desktopHost is null)
         {
-            InitializeComponent();
-            var builder = WebApplication.CreateBuilder();
-
-
-
-            // 註冊 MQTT Server
-            builder.Services
-                .AddHostedMqttServer(options =>
-                {
-                    options.WithDefaultEndpoint();    // TCP 1883
-
-                })
-                .AddMqttConnectionHandler()
-                .AddConnections();
-
-            // ⚠️ 加入 WebSocket 支援 (for MQTT over WebSocket)
-            builder.Services.AddRouting();
-            //builder.WebHost.UseUrls("http://0.0.0.0:5000", "http://127.0.0.1:6000");
-
-            builder.WebHost.UseUrls("http://localhost:5678", "http://localhost:6666");
-
-            var app = builder.Build();
-
-            //app.Use(async (context, next) =>
-            //{
-            //    if (context.Request.Path.StartsWithSegments("/mqtt") && context.Connection.LocalPort != 1883)
-            //    {
-            //        context.Response.StatusCode = 403;
-            //        await context.Response.WriteAsync("MQTT WebSocket only allowed on port 1883.");
-            //        return;
-            //    }
-
-            //    await next();
-            //});
-
-
-            app.UseRouting();
-
-            //app.UseWhen(ctx => ctx.Connection.LocalPort == 6666, app2 =>
-            //{
-
-            //    app2.UseEndpoints(endpoints =>
-            //    {
-            //        // WebSocket 路徑 /mqtt
-            //        endpoints.MapConnectionHandler<MqttConnectionHandler>("/mqtt", options =>
-            //        {
-            //            options.WebSockets.SubProtocolSelector = protocolList => "mqtt";
-            //        });
-            //        endpoints.Map("/hii", () =>
-            //        {
-            //            return "hihi";
-            //        });
-
-
-            //    });
-
-
-            //});
-            app.UseEndpoints(endpoints =>
-            {
-                // WebSocket 路徑 /mqtt
-                endpoints.MapConnectionHandler<MqttConnectionHandler>("/mqtt", options =>
-                {
-                    options.WebSockets.SubProtocolSelector = protocolList => "mqtt";
-                });
-                endpoints.Map("/hii", () =>
-                {
-                    return "hihi";
-                });
-
-
-            });
-
-            // else
-
-            app.MapGet("/hi", () =>
-            {
-                return "hi";
-            });
-            app.UseDefaultFiles();
-            app.UseStaticFiles();
-
-            // 
-            app.UseMqttServer(
-                 server =>
-                 {
-                     server.ClientConnectedAsync += async e =>
-                     {
-
-                     };
-                     server.InterceptingPublishAsync += async e =>
-                     {
-                         MqttRpcExtension.HandleRpcRequest(e);
-                     };
-                     /*
-                      * Attach event handlers etc. if required.
-                      */
-
-                 }
-            );
-
-            app.RunAsync();
-
+            MessageBox.Show("Desktop host is not ready.", "MqttRpc");
+            return;
         }
 
-        public async void button1_Click(object sender, EventArgs e)
+        try
         {
+            await using var client = new MqttRpcClient(
+                new MqttRpcClientOptions(_desktopHost.MqttWebSocketUri));
+            await client.ConnectAsync();
 
-            try
-            {
-                var client = new MqttRpcClient("ws://localhost", 6666);
-                await client.ConnectAsync();
-                var rtn = await client.CallAsync("device/getStatus", new { aaa = "bbb" });
-                await client.DisposeAsync();
-            }
-            catch (Exception ex)
-            {
-            }
+            var status = await client.CallAsync<GetStatusRequest, DeviceStatusResponse>(
+                "device/getStatus",
+                new GetStatusRequest("winforms-demo"));
 
+            MessageBox.Show(
+                JsonSerializer.Serialize(
+                    status,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                    {
+                        WriteIndented = true
+                    }),
+                ".NET MqttRpc response");
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(exception.Message, "MqttRpc call failed");
+        }
+    }
 
+    public async Task RebootAsync(string reason)
+    {
+        if (_desktopHost is null)
+        {
+            throw new InvalidOperationException("Desktop host is not ready.");
         }
 
-        private async void Form1_Load(object sender, EventArgs e)
+        await using var client = new MqttRpcClient(
+            new MqttRpcClientOptions(_desktopHost.MqttWebSocketUri));
+        await client.ConnectAsync();
+
+        var response = await client.CallAsync<RebootRequest, RebootResponse>(
+            "device/reboot",
+            new RebootRequest(reason));
+
+        MessageBox.Show(response.Message, ".NET MqttRpc response");
+    }
+
+    private async void Form1_Load(object sender, EventArgs e)
+    {
+        try
         {
+            _desktopHost = await DesktopAppHost.StartAsync(_router);
             await webView21.EnsureCoreWebView2Async();
-
-            //var path = Path.Combine(Application.StartupPath, "wwwroot", "index.html");
-
-            //webView21.Source = new Uri(path);
-
-            webView21.Source = new Uri("localhost:5678");
+            webView21.Source = _desktopHost.BaseAddress;
         }
-
-        private void formToolStripMenuItem_Click(object sender, EventArgs e)
+        catch (Exception exception)
         {
-            var frm = new Form2(this);
-            frm.Show();
+            MessageBox.Show(exception.ToString(), "Desktop host failed to start");
         }
+    }
+
+    private void formToolStripMenuItem_Click(object sender, EventArgs e)
+    {
+        var form = new Form2(this);
+        form.Show();
+    }
+
+    protected override async void OnFormClosed(FormClosedEventArgs e)
+    {
+        if (_desktopHost is not null)
+        {
+            await _desktopHost.DisposeAsync();
+        }
+
+        base.OnFormClosed(e);
     }
 }

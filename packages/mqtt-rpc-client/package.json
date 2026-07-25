@@ -1,0 +1,52 @@
+{
+  "name": "@6greg9/mqtt-rpc-client",
+  "version": "0.1.0-alpha.1",
+  "description": "Typed MQTT 5 request/response client for the MqttRpc protocol.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/6greg9/MqttRpc.git",
+    "directory": "packages/mqtt-rpc-client"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "build:demo": "tsup --config tsup.demo.config.ts",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "verify": "pnpm run check && pnpm run test && pnpm run build && pnpm run build:demo",
+    "pack:check": "pnpm pack --dry-run"
+  },
+  "dependencies": {
+    "buffer": "6.0.3",
+    "mqtt": "5.15.2"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.9.0"
+}
